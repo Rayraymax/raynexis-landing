@@ -1,4 +1,6 @@
 const RAYNEXIS_KEY = 'raynexis-platform-v1';
+const API_BASE = String(window.RAYNEXIS_API_URL || '').replace(/\/$/, '');
+const backendEnabled = Boolean(API_BASE && !API_BASE.includes('YOUR-RAILWAY'));
 const defaultData = {
   settings: {
     company: 'Raynexis Solutions',
@@ -54,7 +56,22 @@ function getData() {
   }
   catch { return structuredClone(defaultData); }
 }
-function saveData(data) { localStorage.setItem(RAYNEXIS_KEY, JSON.stringify(data)); window.dispatchEvent(new Event('raynexis-data-updated')); }
+function cacheData(data) { localStorage.setItem(RAYNEXIS_KEY, JSON.stringify(data)); window.dispatchEvent(new Event('raynexis-data-updated')); }
+async function apiRequest(path, options = {}) {
+  const headers = { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
+  const token = sessionStorage.getItem('raynexis-admin-token');
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Request failed.');
+  return body;
+}
+function saveData(data) {
+  cacheData(data);
+  if (backendEnabled && document.querySelector('[data-admin]')) {
+    void apiRequest('/api/admin/state', { method: 'PUT', body: JSON.stringify(data) }).catch(error => console.error('Could not save admin changes:', error.message));
+  }
+}
 function esc(value = '') { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char])); }
 function icon(name, size = 19) { return `<i data-lucide="${name}" width="${size}" height="${size}"></i>`; }
 function renderIcons() { if (window.lucide) window.lucide.createIcons({ attrs: { 'stroke-width': 1.8 } }); }
@@ -118,6 +135,10 @@ function initContactForm() {
     const data = getData(); const payload = Object.fromEntries(new FormData(form));
     const inquiry = { ...payload, id: `inq-${Date.now()}`, status: 'New', created: new Date().toISOString() };
     data.inquiries.unshift(inquiry); saveData(data);
+    if (backendEnabled) {
+      try { await apiRequest('/api/inquiries', { method: 'POST', body: JSON.stringify(payload) }); }
+      catch (error) { status.textContent = error.message; return; }
+    }
     try {
       const lead = new URLSearchParams(new FormData(form));
       lead.set('form-name', 'contact-lead');
@@ -136,6 +157,7 @@ function initAdmin() {
   const navigate = next => { section = next; location.hash = next; renderAdmin(); };
   document.querySelectorAll('[data-admin-nav]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); navigate(link.dataset.adminNav); }));
   document.querySelector('[data-admin-menu]')?.addEventListener('click', () => document.querySelector('.admin-sidebar').classList.toggle('open'));
+  document.querySelector('[data-admin-logout]')?.addEventListener('click', () => { sessionStorage.removeItem('raynexis-admin-token'); location.href = 'admin-login.html'; });
   window.addEventListener('hashchange', () => { section = location.hash.replace('#', '') || 'dashboard'; renderAdmin(); });
 
   function renderAdmin() {
@@ -173,12 +195,37 @@ function initAdmin() {
     document.querySelectorAll('[data-delete-content]').forEach(btn => btn.addEventListener('click', () => { const [collection, id] = btn.dataset.deleteContent.split(':'); if (!confirm('Delete this item?')) return; const data = getData(); data[collection] = data[collection].filter(entry => entry.id !== id); saveData(data); renderAdmin(); }));
     document.querySelector('[data-service-search]')?.addEventListener('input', event => { const query = event.target.value.toLowerCase(); document.querySelectorAll('[data-service-row]').forEach(row => row.hidden = !row.dataset.search.includes(query)); });
     document.querySelector('[data-inquiry-search]')?.addEventListener('input', event => { const query = event.target.value.toLowerCase(); document.querySelectorAll('[data-inquiry-card]').forEach(card => card.hidden = !card.dataset.search.includes(query)); });
-    document.querySelectorAll('[data-inquiry-status]').forEach(select => select.addEventListener('change', () => { const data = getData(); const item = data.inquiries.find(i => i.id === select.dataset.inquiryStatus); item.status = select.value; saveData(data); renderAdmin(); }));
+    document.querySelectorAll('[data-inquiry-status]').forEach(select => select.addEventListener('change', () => { const data = getData(); const item = data.inquiries.find(i => i.id === select.dataset.inquiryStatus); item.status = select.value; saveData(data); if (backendEnabled && !String(item.id).startsWith('demo-')) void apiRequest(`/api/admin/inquiries/${item.id}`, { method: 'PATCH', body: JSON.stringify({ status: item.status }) }).catch(error => alert(error.message)); renderAdmin(); }));
     document.querySelector('[data-settings-form]')?.addEventListener('submit', event => { event.preventDefault(); const data = getData(); Object.assign(data.settings, Object.fromEntries(new FormData(event.target))); saveData(data); const status = event.target.querySelector('.form-status'); status.textContent = 'Saved'; setTimeout(() => status.textContent = '', 2200); });
   }
   function openDrawer(item = {}) { const backdrop = document.querySelector('[data-drawer-backdrop]'); backdrop.classList.add('open'); const drawer = backdrop.querySelector('.drawer'); drawer.innerHTML = `<div class="drawer-head"><h2>${item.id ? 'Edit service' : 'New service'}</h2><button class="icon-btn" data-close-drawer>${icon('x', 19)}</button></div><form data-service-form>${settingField('Title', 'title', item.title || '')}${settingField('Category', 'category', item.category || 'Technology')}<div class="field"><label>Description</label><textarea name="description" required>${esc(item.description || '')}</textarea></div>${settingField('Starting price', 'price', item.price || 'KES ')}<div class="field"><label>Icon name</label><input name="icon" value="${esc(item.icon || 'sparkles')}" placeholder="e.g. globe-2" required></div><div class="field"><label><input type="checkbox" name="published" ${item.published !== false ? 'checked' : ''}> Published on website</label></div><div class="drawer-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-outline" type="button" data-close-drawer>Cancel</button></div></form>`; renderIcons(); drawer.querySelectorAll('[data-close-drawer]').forEach(btn => btn.addEventListener('click', () => backdrop.classList.remove('open'))); drawer.querySelector('form').addEventListener('submit', event => { event.preventDefault(); const form = new FormData(event.target); const data = getData(); const next = { id: item.id || `service-${Date.now()}`, title: form.get('title'), category: form.get('category'), description: form.get('description'), price: form.get('price'), icon: form.get('icon'), published: form.get('published') === 'on' }; const index = data.services.findIndex(s => s.id === next.id); if (index >= 0) data.services[index] = next; else data.services.push(next); saveData(data); backdrop.classList.remove('open'); renderAdmin(); }); }
   function openContentDrawer(collection, item = {}) { const backdrop = document.querySelector('[data-drawer-backdrop]'); backdrop.classList.add('open'); const drawer = backdrop.querySelector('.drawer'); drawer.innerHTML = `<div class="drawer-head"><h2>${item.id ? 'Edit' : 'New'} ${esc(collection.slice(0, -1))}</h2><button class="icon-btn" data-close-drawer>${icon('x', 19)}</button></div><form data-content-form>${settingField('Title', 'title', item.title || '')}<div class="field"><label>Description</label><textarea name="description" required>${esc(item.description || '')}</textarea></div><div class="field"><label><input type="checkbox" name="published" ${item.published !== false ? 'checked' : ''}> Published on website</label></div><div class="drawer-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-outline" type="button" data-close-drawer>Cancel</button></div></form>`; renderIcons(); drawer.querySelectorAll('[data-close-drawer]').forEach(btn => btn.addEventListener('click', () => backdrop.classList.remove('open'))); drawer.querySelector('form').addEventListener('submit', event => { event.preventDefault(); const form = new FormData(event.target); const data = getData(); const next = { id: item.id || `${collection}-${Date.now()}`, title: form.get('title'), description: form.get('description'), published: form.get('published') === 'on' }; const index = data[collection].findIndex(entry => entry.id === next.id); if (index >= 0) data[collection][index] = next; else data[collection].push(next); saveData(data); backdrop.classList.remove('open'); renderAdmin(); }); }
-  renderAdmin();
+  if (!backendEnabled) { renderAdmin(); return; }
+  apiRequest('/api/auth/me')
+    .then(() => apiRequest('/api/admin/bootstrap'))
+    .then(remote => { cacheData(remote); renderAdmin(); })
+    .catch(() => { location.href = 'admin-login.html?return=admin.html'; });
 }
 
-document.addEventListener('DOMContentLoaded', () => { hydrateSite(); initNav(); renderPillars(); initServices(); initContactForm(); initAdmin(); renderIcons(); });
+function initAdminLogin() {
+  const form = document.querySelector('[data-admin-login]'); if (!form) return;
+  const message = form.querySelector('[data-login-message]');
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!backendEnabled) { message.textContent = 'Backend not connected yet. Add your Railway URL in api-config.js.'; return; }
+    const button = form.querySelector('button[type="submit"]'); button.disabled = true; message.textContent = 'Signing in…';
+    try {
+      const payload = Object.fromEntries(new FormData(form));
+      const result = await apiRequest('/api/auth/login', { method: 'POST', body: JSON.stringify(payload) });
+      sessionStorage.setItem('raynexis-admin-token', result.token);
+      location.href = new URLSearchParams(location.search).get('return') || 'admin.html';
+    } catch (error) { message.textContent = error.message; button.disabled = false; }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  hydrateSite(); initNav(); renderPillars(); initServices(); initContactForm(); initAdmin(); initAdminLogin(); renderIcons();
+  if (backendEnabled && !document.querySelector('[data-admin]') && !document.querySelector('[data-admin-login]')) {
+    void apiRequest('/api/public/bootstrap').then(remote => { cacheData({ ...getData(), ...remote }); hydrateSite(); renderPillars(); renderServices(); }).catch(error => console.warn('API unavailable:', error.message));
+  }
+});

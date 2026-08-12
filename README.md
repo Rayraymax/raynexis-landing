@@ -18,14 +18,25 @@ Open `http://127.0.0.1:4173`.
 4. Deploy, then open **Forms** and enable form detection. Redeploy once so Netlify detects `contact-lead`.
 5. Set your custom domain in **Domain management** and update the canonicals in the HTML from `raynexis.co.ke` if your final domain differs.
 
-## Production admin backend
+## Production admin backend: Railway
 
-The current admin UI stores edits in the current browser for safe prototyping. For a shared, password-protected admin and inquiry pipeline, connect Supabase:
+The `backend/` folder is a Node/Express API with PostgreSQL storage, password hashing, JWT login protection, public inquiry submission, and a shared content manager.
 
-1. Create a project at Supabase.
-2. Run `supabase/schema.sql` in its SQL Editor.
-3. Create the first admin user at **Authentication** > **Users** > **Add user**, using a business-controlled email and a strong unique password.
-4. Run the commented profile `insert` at the bottom of `supabase/schema.sql`, replacing the email with the admin's email. This grants the user the `admin` role.
-5. Copy `supabase/config.js.example` to `supabase/config.js`, enter the project URL and **publishable** API key, then connect that configuration to the frontend app. Never put a Supabase service-role key in the browser or Git.
+1. In Railway, create a project and add a **PostgreSQL** service.
+2. Add a second service from this GitHub repository. In that service's **Settings > Source**, set **Root Directory** to `backend`.
+3. Add these service variables (replace the values in capitals):
 
-The SQL uses Row Level Security: visitors can submit leads/read published content, while only an authenticated admin can read inquiries or edit content.
+```text
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+JWT_SECRET=USE-A-UNIQUE-SECRET-AT-LEAST-32-CHARACTERS-LONG
+FRONTEND_ORIGIN=https://YOUR-NETLIFY-SITE.netlify.app
+ADMIN_EMAIL=admin@raynexis.co.ke
+SEED_ADMIN_PASSWORD=USE-A-STRONG-UNIQUE-TEMPORARY-PASSWORD
+NODE_ENV=production
+```
+
+4. Railway automatically runs `npm start` from `backend/package.json`. Deploy the service, then copy its public domain from **Settings > Networking**.
+5. Replace the blank value in `api-config.js` with that API domain, for example `https://raynexis-api-production.up.railway.app`, commit, push, and let Netlify redeploy.
+6. Sign in at `admin-login.html` with `ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`. After the first successful login, remove `SEED_ADMIN_PASSWORD` from Railway Variables and redeploy; the password is already stored as a hash in PostgreSQL.
+
+Keep `DATABASE_URL`, `JWT_SECRET`, and all passwords in Railway Variables only — never in GitHub or `api-config.js`.

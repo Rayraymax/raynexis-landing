@@ -1,0 +1,30 @@
+{
+  "settings": {
+    "company": "Raynexis Solutions",
+    "tagline": "Technology. Solutions. Future.",
+    "phone": "0707 938 295",
+    "whatsapp": "254707938295",
+    "email": "rayraymax49@gmail.com",
+    "address": "Nairobi, Kenya",
+    "heroEyebrow": "TECHNOLOGY · INNOVATION · IMPACT",
+    "heroTitle": "Technology that keeps your business <span>running.</span>",
+    "heroDescription": "Reliable ICT support, fleet intelligence, secure systems, and digital solutions built for ambitious Kenyan businesses.",
+    "facebook": "https://www.facebook.com/raynexissolutions",
+    "instagram": "https://www.instagram.com/raynexissolutions",
+    "tiktok": "https://www.tiktok.com/@raynexissolutions"
+  },
+  "services": [
+    { "id": "fleet", "title": "Fleet & Telematics", "category": "Fleet", "icon": "radio-tower", "description": "GPS tracking, speed limiter installation, fuel monitoring, and actionable fleet visibility.", "price": "KES 15,000", "published": true },
+    { "id": "digital", "title": "Digital & Brand", "category": "Digital", "icon": "palette", "description": "Content, brand identity, social media, and campaigns that make your business memorable.", "price": "KES 25,000", "published": true },
+    { "id": "technology", "title": "Technology & Insight", "category": "Technology", "icon": "code-2", "description": "Web, ICT support, analytics, and advisory systems that turn operations into momentum.", "price": "KES 30,000", "published": true },
+    { "id": "gps", "title": "GPS Fleet Tracking", "category": "Fleet", "icon": "map-pin", "description": "Real-time fleet visibility, route history, geofencing, and driver performance reporting.", "price": "KES 15,000", "published": true },
+    { "id": "security", "title": "Security Systems & CCTV", "category": "Technology", "icon": "shield-check", "description": "Protect your premises with smart CCTV, access control, and alarm solutions.", "price": "KES 18,000", "published": true },
+    { "id": "web", "title": "Web Development", "category": "Technology", "icon": "globe-2", "description": "Modern, responsive websites and web platforms designed to convert and grow.", "price": "KES 30,000", "published": true },
+    { "id": "support", "title": "Managed ICT Support", "category": "Technology", "icon": "headphones", "description": "Proactive monitoring, helpdesk support, and IT management for productive teams.", "price": "KES 20,000 / month", "published": true },
+    { "id": "social", "title": "Social Media Campaigns", "category": "Digital", "icon": "megaphone", "description": "A consistent content system that builds awareness and qualified demand.", "price": "KES 20,000", "published": true }
+  ],
+  "projects": [{ "id": "project-1", "title": "Fleet visibility programme", "description": "GPS, fuel monitoring, and reporting for a growing logistics operation.", "published": true }],
+  "testimonials": [{ "id": "testimonial-1", "title": "Brian Mwangi · Head of Operations", "description": "Raynexis has been instrumental in strengthening our security and IT infrastructure. Their team is responsive, professional and truly dependable.", "published": true }],
+  "team": [{ "id": "team-1", "title": "Raymond · Founder", "description": "Client strategy, technology delivery, and partner success.", "published": true }],
+  "pages": [{ "id": "page-home", "title": "Home", "description": "Hero, pillars, trust strip, proof, and footer.", "published": true }]
+}
