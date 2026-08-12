@@ -1,0 +1,6 @@
+// Copy to supabase/config.js and replace the placeholders after creating your Supabase project.
+// This file is ignored by Git. Use only the publishable key in browser code — never use a service-role key here.
+window.RAYNEXIS_SUPABASE = {
+  url: 'https://YOUR-PROJECT.supabase.co',
+  publishableKey: 'YOUR-PUBLISHABLE-KEY'
+};

@@ -1,0 +1,17 @@
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local configuration and secrets — never commit these
+.env
+.env.*
+!.env.example
+supabase/config.js
+
+# Dependency and deployment folders
+node_modules/
+.netlify/
+dist/
+build/
