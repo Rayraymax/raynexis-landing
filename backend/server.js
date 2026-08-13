@@ -150,5 +150,12 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ error: 'The server could not complete that request.' });
 });
 
-initialise().then(() => app.listen(port, '0.0.0.0', () => console.log(`Raynexis API listening on ${port}`)))
-  .catch(error => { console.error('Database initialisation failed', error); process.exit(1); });
+initialise()
+  .then(() => app.listen(port, '0.0.0.0', () => {
+    console.log(`Raynexis API listening on ${port}`);
+    console.log(`PORT environment: ${process.env.PORT}`);
+  }))
+  .catch(error => {
+    console.error('Database initialisation failed', error);
+    process.exit(1);
+  });
