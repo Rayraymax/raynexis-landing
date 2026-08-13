@@ -23,10 +23,13 @@ const attempts = new Map();
 app.use(express.json({ limit: '1mb' }));
 app.set('trust proxy', 1);
 app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origin is not allowed by CORS'));
-  },
+  origin: 'https://raynexis.netlify.app',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('*', cors({
+  origin: 'https://raynexis.netlify.app',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
