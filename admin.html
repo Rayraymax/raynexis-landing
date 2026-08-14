@@ -11,16 +11,19 @@
       <nav aria-label="Admin navigation">
         <a href="#dashboard" data-admin-nav="dashboard"> <i data-lucide="layout-dashboard" width="20"></i> Dashboard</a>
         <a href="#services" data-admin-nav="services"> <i data-lucide="boxes" width="20"></i> Services</a>
+        <a href="#media" data-admin-nav="media"> <i data-lucide="images" width="20"></i> Media library</a>
         <a href="#projects" data-admin-nav="projects"> <i data-lucide="briefcase-business" width="20"></i> Projects</a>
         <a href="#testimonials" data-admin-nav="testimonials"> <i data-lucide="quote" width="20"></i> Testimonials</a>
         <a href="#team" data-admin-nav="team"> <i data-lucide="users" width="20"></i> Team</a>
         <a href="#pages" data-admin-nav="pages"> <i data-lucide="file-text" width="20"></i> Pages</a>
         <a href="#inquiries" data-admin-nav="inquiries"> <i data-lucide="inbox" width="20"></i> Inquiries</a>
         <a href="#settings" data-admin-nav="settings"> <i data-lucide="settings" width="20"></i> Settings</a>
-      </nav><footer>Raynexis © 2026<br>Content manager preview</footer>
+      </nav><footer>Raynexis © 2026<br>Editable content workspace</footer>
     </aside>
-    <div class="admin-main"><header class="admin-top"><div style="display:flex;align-items:center;gap:14px"><button class="icon-btn" data-admin-menu aria-label="Open admin menu"><i data-lucide="menu" width="20"></i></button><h1>Raynexis Admin — <span data-admin-title>Dashboard</span></h1></div><div class="admin-user"><i data-lucide="bell" width="20"></i><div class="avatar">R</div><span>Admin</span><button class="icon-btn" data-admin-logout title="Sign out"><i data-lucide="log-out" width="18"></i></button></div></header><main class="admin-content" data-admin-content></main></div>
+    <div class="admin-main"><header class="admin-top"><div style="display:flex;align-items:center;gap:14px"><button class="icon-btn" data-admin-menu aria-label="Open admin menu"><i data-lucide="menu" width="20"></i></button><h1>Raynexis Admin — <span data-admin-title>Dashboard</span></h1></div><div class="admin-user"><button class="icon-btn notification-trigger" data-notifications aria-label="Open notifications"><i data-lucide="bell" width="20"></i><span class="notification-count" data-notification-count>0</span></button><div class="notification-popover" data-notification-popover></div><button class="avatar avatar-button" data-admin-profile aria-label="Open profile">R</button><span data-admin-user-name>Admin</span><button class="icon-btn" data-admin-logout title="Sign out"><i data-lucide="log-out" width="18"></i></button></div></header><main class="admin-content" data-admin-content><div class="admin-loading">Checking secure access…</div></main></div>
   </div>
-  <div class="drawer-backdrop" data-drawer-backdrop></div>
-  <script src="api-config.js"></script><script src="script.js"></script>
+  <div class="drawer-backdrop" data-drawer-backdrop>
+  <aside class="drawer"></aside>
+</div>
+  <script src="api-config.js"></script><script src="script.js"></script><script src="admin-app.js"></script>
 </body></html>

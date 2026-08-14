@@ -26,6 +26,10 @@ const defaultData = {
       icon: 'radio-tower',
       description: 'GPS tracking, speed limiter installation, fuel monitoring, and actionable fleet visibility.',
       price: 'KES 15,000',
+      shortDescription: 'Real-time tracking, route optimization, driver behavior monitoring and comprehensive fleet reports.',
+      image: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=1200&q=85',
+      altText: 'Fleet of trucks on a highway',
+      features: ['Live vehicle tracking', 'Geofencing and alerts', 'Fuel and route reporting'],
       published: true
     },
     {
@@ -35,6 +39,9 @@ const defaultData = {
       icon: 'palette',
       description: 'Content, brand identity, social media, and campaigns that make your business memorable.',
       price: 'KES 25,000',
+      shortDescription: 'Tailored web and mobile applications designed to streamline your operations and drive growth.',
+      image: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1200&q=85',
+      altText: 'Developer working on a digital product',
       published: true
     },
     {
@@ -44,6 +51,9 @@ const defaultData = {
       icon: 'code-2',
       description: 'Web, ICT support, analytics, and advisory systems that turn operations into momentum.',
       price: 'KES 30,000',
+      shortDescription: 'Reliable IT systems, cloud solutions, network management and enterprise support you can count on.',
+      image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=85',
+      altText: 'Blue-lit server racks in a data centre',
       published: true
     },
     {
@@ -97,13 +107,19 @@ const defaultData = {
     {
       id: 'project-1',
       title: 'Fleet visibility programme',
+      client: 'Uzima Logistics',
       description: 'GPS, fuel monitoring, and reporting for a growing logistics operation.',
+      image: 'https://images.unsplash.com/photo-1501700493788-fa1a4fc9fe83?auto=format&fit=crop&w=1200&q=85',
+      results: ['28% reduction in fuel costs', '35% faster deliveries', '100% fleet visibility'],
       published: true
     },
     {
       id: 'project-2',
       title: 'Secure premises rollout',
+      client: 'Naivas Retail',
       description: 'A coordinated CCTV and access-control deployment for a Nairobi SME.',
+      image: 'https://images.unsplash.com/photo-1601598851547-4302969d9c7c?auto=format&fit=crop&w=1200&q=85',
+      results: ['99.9% system uptime', '40% faster issue resolution', '20% lower support costs'],
       published: true
     }
   ],
@@ -131,6 +147,17 @@ const defaultData = {
       id: 'page-home',
       title: 'Home',
       description: 'Hero, pillars, trust strip, proof, and footer.',
+      slug: '/',
+      seoTitle: 'Raynexis Solutions | Technology that keeps your business running',
+      seoDescription: 'Reliable technology, fleet intelligence, and digital solutions built for ambitious Kenyan businesses.',
+      sections: [
+        { id: 'hero', label: 'Hero', type: 'hero', visible: true, data: { headline: 'Technology that keeps your business running', subheadline: 'Raynexis delivers smart tracking, custom software and reliable IT solutions that help you operate efficiently, reduce costs and stay ahead of the competition.' } },
+        { id: 'trust', label: 'Trust logos', type: 'trust', visible: true, data: { logos: ['Modern Coast', 'Uzima Logistics', 'Kenchem', 'naivas', 'Britam'] } },
+        { id: 'pillars', label: 'Pillars', type: 'pillars', visible: true, data: {} },
+        { id: 'stats', label: 'Stats band', type: 'stats', visible: true, data: { stats: [{ value: '200+', label: 'Deployments' }, { value: '24/7', label: 'Support' }, { value: '5+', label: 'Years' }] } },
+        { id: 'cases', label: 'Case studies', type: 'cases', visible: true, data: {} },
+        { id: 'cta', label: 'CTA band', type: 'cta', visible: true, data: { headline: 'Let’s power your business forward.', body: 'Get expert advice and a tailored solution for your needs.' } }
+      ],
       published: true
     },
     {
@@ -312,6 +339,10 @@ function hydrateSite() {
   const data = getData();
   const { settings } = data;
 
+  const page = (data.pages || []).find(item => item.published && (item.slug === location.pathname.replace(/\\/g, '/') || (location.pathname.endsWith('index.html') && item.slug === '/')));
+  if (page?.seoTitle) document.title = page.seoTitle;
+  if (page?.seoDescription) document.querySelector('meta[name="description"]')?.setAttribute('content', page.seoDescription);
+
   document.querySelectorAll('[data-setting]').forEach(el => {
     const key = el.dataset.setting;
 
@@ -326,7 +357,7 @@ function hydrateSite() {
   });
 
   document.querySelectorAll('[data-wa-link]').forEach(el => {
-    el.href = waLink(el.dataset.waMessage);
+    el.href = waLink(el.dataset.waMessage || settings.whatsappMessage);
   });
 
   document.querySelectorAll('[data-email-link]').forEach(el => {
@@ -401,6 +432,7 @@ function renderPillars() {
     .map(
       item => `
         <article class="pillar-card">
+          ${item.image ? `<img class="pillar-image" src="${esc(item.image)}" alt="${esc(item.altText || item.title)}" loading="lazy">` : ''}
           <div class="pillar-icon">
             ${icon(item.icon, 27)}
           </div>
@@ -446,6 +478,7 @@ function renderServices(filter = 'All') {
       .map(
         item => `
           <article class="service-card">
+            ${item.image ? `<div class="service-image"><img src="${esc(item.image)}" alt="${esc(item.altText || item.title)}" loading="lazy"></div>` : ''}
             <div class="service-top">
               <div class="service-icon">
                 ${icon(item.icon, 25)}
@@ -514,6 +547,38 @@ function initServices() {
   }
 }
 
+function renderHomeSections() {
+  const data = getData();
+  const homePage = (data.pages || []).find(page => page.slug === '/') || data.pages?.[0];
+  const section = type => homePage?.sections?.find(item => item.type === type)?.data || {};
+  const sectionVisible = type => homePage?.sections?.find(item => item.type === type)?.visible !== false;
+  const setSectionVisible = (type, selector) => { const element = document.querySelector(selector); if (element) element.hidden = !sectionVisible(type); };
+  setSectionVisible('hero', '.hero'); setSectionVisible('trust', '.trust-strip'); setSectionVisible('pillars', '.hero-cards'); setSectionVisible('stats', '.impact'); setSectionVisible('cases', '.case-band'); setSectionVisible('cta', '.home-cta');
+  const heroData = section('hero');
+  if (heroData.headline) document.querySelector('[data-setting="heroTitle"]')?.replaceChildren(document.createTextNode(heroData.headline));
+  if (heroData.subheadline) document.querySelector('[data-setting="heroDescription"]')?.replaceChildren(document.createTextNode(heroData.subheadline));
+  const trustHost = document.querySelector('[data-home-trust]');
+  if (trustHost) trustHost.innerHTML = (section('trust').logos || ['Safaricom', 'EQUITY', 'KCB', 'Britam', 'NCBA', 'Bata']).map(logoName => `<span>${esc(logoName)}</span>`).join('');
+  const statsHost = document.querySelector('.impact-grid');
+  const configuredStats = section('stats').stats || [];
+  if (statsHost && configuredStats.length) {
+    const quote = statsHost.querySelector('.quote-card')?.outerHTML || '';
+    statsHost.innerHTML = configuredStats.slice(0, 3).map((stat, index) => `<article class="stat-card"><i data-lucide="${['rocket', 'headphones', 'shield-check'][index]}" width="34"></i><strong>${esc(stat.value)}</strong><h3>${esc(stat.label)}</h3><p>${esc(stat.description || '')}</p></article>`).join('') + quote;
+  }
+  const ctaData = section('cta');
+  const cta = document.querySelector('.home-cta');
+  if (ctaData.headline && cta) { cta.querySelector('h2').textContent = ctaData.headline; cta.querySelector('p').textContent = ctaData.body || ''; }
+  const serviceHost = document.querySelector('[data-home-services]');
+  if (serviceHost) {
+    serviceHost.innerHTML = data.services.filter(item => item.published).slice(0, 3).map(item => `<article class="home-service-card"><div class="home-service-image">${item.image ? `<img src="${esc(item.image)}" alt="${esc(item.altText || item.title)}" loading="lazy">` : icon(item.icon, 28)}</div><div class="home-service-copy"><span class="eyebrow">${esc(item.category)}</span><h3>${esc(item.title)}</h3><p>${esc(item.shortDescription || item.description)}</p><div class="home-service-meta"><strong>${esc(item.price || 'Talk to us')}</strong><a class="text-link" href="contact.html?service=${encodeURIComponent(item.title)}">Explore ${icon('arrow-up-right', 15)}</a></div></div></article>`).join('');
+  }
+  const caseHost = document.querySelector('[data-home-cases]');
+  if (caseHost) {
+    caseHost.innerHTML = (data.projects || []).filter(item => item.published).slice(0, 2).map(item => `<article class="home-case-card">${item.image ? `<img src="${esc(item.image)}" alt="${esc(item.title)}" loading="lazy">` : ''}<div><span class="eyebrow">${esc(item.client || 'Case study')}</span><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p><div class="case-results">${(item.results || []).slice(0, 3).map(result => `<span>${esc(result)}</span>`).join('')}</div></div></article>`).join('');
+  }
+  renderIcons();
+}
+
 
 function initContactForm() {
   const form = document.querySelector(
@@ -544,21 +609,9 @@ function initContactForm() {
       return;
     }
 
-    const data = getData();
     const payload = Object.fromEntries(
       new FormData(form)
     );
-
-    const inquiry = {
-      ...payload,
-      id: `inq-${Date.now()}`,
-      status: 'New',
-      created: new Date().toISOString()
-    };
-
-    data.inquiries.unshift(inquiry);
-
-    saveData(data);
 
     if (backendEnabled) {
       try {
@@ -570,6 +623,10 @@ function initContactForm() {
         status.textContent = error.message;
         return;
       }
+    } else {
+      const data = getData();
+      data.inquiries.unshift({ ...payload, id: `inq-${Date.now()}`, status: 'New', created: new Date().toISOString() });
+      saveData(data);
     }
 
     try {
@@ -594,6 +651,7 @@ function initContactForm() {
     status.textContent =
       'Thanks — we’ll get back to you shortly.';
 
+    form.classList.add('submitted');
     form.reset();
 
     const message =
@@ -2172,11 +2230,13 @@ document.addEventListener(
 
     renderPillars();
 
+    renderHomeSections();
+
     initServices();
 
     initContactForm();
 
-    initAdmin();
+    if (!window.__newAdminApp) initAdmin();
 
     initAdminLogin();
 
@@ -2211,6 +2271,8 @@ document.addEventListener(
           renderPillars();
 
           renderServices();
+
+          renderHomeSections();
         })
         .catch(error => {
 

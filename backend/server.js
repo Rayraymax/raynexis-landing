@@ -20,11 +20,17 @@ const pool = new Pool({
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const attempts = new Map();
 
-app.use(express.json({ limit: '1mb' }));
+// Content records include optional optimized previews as data URLs. Keep the
+// request ceiling high enough for an admin upload while still avoiding an
+// unbounded JSON endpoint.
+app.use(express.json({ limit: '8mb' }));
 app.set('trust proxy', 1);
 app.use(cors({
-  origin: 'https://raynexis.netlify.app',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'],
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || origin === 'https://raynexis.netlify.app' || /^https?:\/\/localhost(?::\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(?::\d+)?$/.test(origin)) return callback(null, true);
+    return callback(new Error('Origin not allowed by CORS.'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -42,7 +48,9 @@ function cleanState(value) {
     projects: Array.isArray(state.projects) ? state.projects : [],
     testimonials: Array.isArray(state.testimonials) ? state.testimonials : [],
     team: Array.isArray(state.team) ? state.team : [],
-    pages: Array.isArray(state.pages) ? state.pages : []
+    pages: Array.isArray(state.pages) ? state.pages : [],
+    media: Array.isArray(state.media) ? state.media : [],
+    activity: Array.isArray(state.activity) ? state.activity : []
   };
 }
 function publicState(state) {
@@ -50,6 +58,8 @@ function publicState(state) {
   ['services', 'projects', 'testimonials', 'team', 'pages'].forEach(key => {
     filtered[key] = filtered[key].filter(item => item.published);
   });
+  filtered.media = [];
+  filtered.activity = [];
   return filtered;
 }
 async function getState() {
@@ -77,11 +87,56 @@ async function initialise() {
       status text not null default 'New' check (status in ('New', 'Contacted', 'Won')),
       created_at timestamptz not null default now()
     );
+    create table if not exists media_assets (
+      id uuid primary key default gen_random_uuid(),
+      filename text not null,
+      mime_type text not null,
+      data_url text not null,
+      alt_text text not null default '',
+      caption text not null default '',
+      folder text not null default 'Unsorted',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+    create table if not exists page_sections (
+      id uuid primary key default gen_random_uuid(),
+      page_slug text not null,
+      section_type text not null,
+      label text not null,
+      position integer not null default 0,
+      visible boolean not null default true,
+      data jsonb not null default '{}'::jsonb,
+      updated_at timestamptz not null default now(),
+      unique (page_slug, id)
+    );
+    create table if not exists activity_log (
+      id uuid primary key default gen_random_uuid(),
+      action text not null,
+      detail text not null default '',
+      created_at timestamptz not null default now()
+    );
   `);
   const stateExists = await pool.query('select 1 from app_state where id = 1');
   if (!stateExists.rowCount) {
     const seed = JSON.parse(await fs.readFile(path.join(currentDir, 'seed-data.json'), 'utf8'));
     await saveState(seed);
+  } else {
+    // Backfill the richer editor fields for installations created by the
+    // earlier localStorage prototype without overwriting custom copy.
+    const seed = JSON.parse(await fs.readFile(path.join(currentDir, 'seed-data.json'), 'utf8'));
+    const current = await getState();
+    const mergeCollection = key => (current[key] || []).map(item => ({ ...(seed[key] || []).find(seedItem => seedItem.id === item.id), ...item }));
+    const migrated = {
+      ...seed,
+      ...current,
+      settings: { ...(seed.settings || {}), ...(current.settings || {}) },
+      services: mergeCollection('services'),
+      projects: mergeCollection('projects'),
+      testimonials: mergeCollection('testimonials'),
+      team: mergeCollection('team'),
+      pages: (current.pages || []).map(item => ({ ...(seed.pages || []).find(seedItem => seedItem.id === item.id), ...item }))
+    };
+    await saveState(migrated);
   }
   if (process.env.ADMIN_EMAIL && process.env.SEED_ADMIN_PASSWORD) {
     const email = process.env.ADMIN_EMAIL.toLowerCase();
@@ -130,11 +185,41 @@ app.get('/api/auth/me', auth, async (req, res) => res.json({ user: { email: req.
 app.get('/api/admin/bootstrap', auth, async (_req, res, next) => {
   try {
     const inquiries = await pool.query('select id, name, company, phone, email, service, fleet, budget, timeline, message, status, created_at as created from inquiries order by created_at desc');
-    res.json({ ...(await getState()), inquiries: inquiries.rows });
+    const media = await pool.query('select id, filename, mime_type as "mimeType", data_url as "dataUrl", alt_text as "altText", caption, folder, created_at as created, updated_at as updated from media_assets order by created_at desc');
+    const activity = await pool.query('select id, action, detail, created_at as created from activity_log order by created_at desc limit 20');
+    res.json({ ...(await getState()), inquiries: inquiries.rows, media: media.rows, activity: activity.rows });
   } catch (error) { next(error); }
 });
 app.put('/api/admin/state', auth, async (req, res, next) => {
-  try { await saveState(req.body); res.json({ ok: true }); } catch (error) { next(error); }
+  try {
+    await saveState(req.body);
+    const action = String(req.body?.__activity?.action || 'Content updated').slice(0, 120);
+    const detail = String(req.body?.__activity?.detail || '').slice(0, 240);
+    await pool.query('insert into activity_log (action, detail) values ($1, $2)', [action, detail]);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+app.post('/api/admin/media', auth, async (req, res, next) => {
+  try {
+    const { filename, mimeType, dataUrl, altText = '', caption = '', folder = 'Unsorted' } = req.body || {};
+    if (!filename || !mimeType || !String(dataUrl || '').startsWith('data:image/')) return res.status(400).json({ error: 'Please upload a valid image.' });
+    if (String(dataUrl).length > 7_500_000) return res.status(413).json({ error: 'That image is too large. Please use an image under 5 MB.' });
+    const result = await pool.query('insert into media_assets (filename, mime_type, data_url, alt_text, caption, folder) values ($1,$2,$3,$4,$5,$6) returning id, filename, mime_type as "mimeType", data_url as "dataUrl", alt_text as "altText", caption, folder, created_at as created, updated_at as updated', [String(filename).slice(0, 180), mimeType, dataUrl, String(altText).slice(0, 125), String(caption).slice(0, 250), String(folder).slice(0, 80)]);
+    await pool.query('insert into activity_log (action, detail) values ($1, $2)', ['New media uploaded', result.rows[0].filename]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) { next(error); }
+});
+app.patch('/api/admin/media/:id', auth, async (req, res, next) => {
+  try {
+    const { altText = '', caption = '', folder = 'Unsorted' } = req.body || {};
+    const result = await pool.query('update media_assets set alt_text=$1, caption=$2, folder=$3, updated_at=now() where id=$4 returning id, filename, mime_type as "mimeType", data_url as "dataUrl", alt_text as "altText", caption, folder, created_at as created, updated_at as updated', [String(altText).slice(0, 125), String(caption).slice(0, 250), String(folder).slice(0, 80), req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Media asset not found.' });
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+});
+app.delete('/api/admin/media/:id', auth, async (req, res, next) => {
+  try { const result = await pool.query('delete from media_assets where id=$1 returning id', [req.params.id]); if (!result.rowCount) return res.status(404).json({ error: 'Media asset not found.' }); res.json({ ok: true }); }
+  catch (error) { next(error); }
 });
 app.patch('/api/admin/inquiries/:id', auth, async (req, res, next) => {
   try {

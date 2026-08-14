@@ -58,11 +58,44 @@ create table if not exists public.inquiries (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.media_assets (
+  id uuid primary key default gen_random_uuid(),
+  filename text not null,
+  mime_type text not null,
+  data_url text not null,
+  alt_text text not null default '',
+  caption text not null default '',
+  folder text not null default 'Unsorted',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.page_sections (
+  id uuid primary key default gen_random_uuid(),
+  page_slug text not null,
+  section_type text not null,
+  label text not null,
+  position integer not null default 0,
+  visible boolean not null default true,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.activity_log (
+  id uuid primary key default gen_random_uuid(),
+  action text not null,
+  detail text not null default '',
+  created_at timestamptz not null default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.settings enable row level security;
 alter table public.services enable row level security;
 alter table public.content_items enable row level security;
 alter table public.inquiries enable row level security;
+alter table public.media_assets enable row level security;
+alter table public.page_sections enable row level security;
+alter table public.activity_log enable row level security;
 
 -- Visitors can read published content and send inquiries. Only authenticated admins can manage data.
 create policy "published services are public" on public.services for select using (published or public.is_admin());
@@ -75,6 +108,9 @@ create policy "admins read profiles" on public.profiles for select using (auth.u
 create policy "admins manage profiles" on public.profiles for all using (public.is_admin()) with check (public.is_admin());
 create policy "public can submit inquiries" on public.inquiries for insert with check (true);
 create policy "admins manage inquiries" on public.inquiries for all using (public.is_admin()) with check (public.is_admin());
+create policy "admins manage media" on public.media_assets for all using (public.is_admin()) with check (public.is_admin());
+create policy "admins manage page sections" on public.page_sections for all using (public.is_admin()) with check (public.is_admin());
+create policy "admins read activity" on public.activity_log for select using (public.is_admin());
 
 -- After creating the first Auth user in the Supabase dashboard, run this once.
 -- Replace the email with your real admin email address.
