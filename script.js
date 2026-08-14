@@ -63,6 +63,8 @@ const defaultData = {
       icon: 'map-pin',
       description: 'Real-time fleet visibility, route history, geofencing, and driver performance reporting.',
       price: 'KES 15,000',
+      image: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=85',
+      altText: 'Truck travelling on a road',
       published: true
     },
     {
@@ -72,6 +74,8 @@ const defaultData = {
       icon: 'shield-check',
       description: 'Protect your premises with smart CCTV, access control, and alarm solutions.',
       price: 'KES 18,000',
+      image: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=900&q=85',
+      altText: 'Security camera mounted on a building',
       published: true
     },
     {
@@ -81,26 +85,10 @@ const defaultData = {
       icon: 'globe-2',
       description: 'Modern, responsive websites and web platforms designed to convert and grow.',
       price: 'KES 30,000',
+      image: 'https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?auto=format&fit=crop&w=900&q=85',
+      altText: 'Website design on a laptop',
       published: true
     },
-    {
-      id: 'support',
-      title: 'Managed ICT Support',
-      category: 'Technology',
-      icon: 'headphones',
-      description: 'Proactive monitoring, helpdesk support, and IT management for productive teams.',
-      price: 'KES 20,000 / month',
-      published: true
-    },
-    {
-      id: 'social',
-      title: 'Social Media Campaigns',
-      category: 'Digital',
-      icon: 'megaphone',
-      description: 'A consistent content system that builds awareness and qualified demand.',
-      price: 'KES 20,000',
-      published: true
-    }
   ],
 
   projects: [

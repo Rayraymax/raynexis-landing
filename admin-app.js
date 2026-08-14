@@ -45,15 +45,27 @@ window.__newAdminApp = true;
       adminData = { ...remote, media: ensure(remote.media), activity: ensure(remote.activity) };
       document.body.classList.add('admin-ready');
       document.querySelector('[data-admin-user-name]')?.replaceChildren(document.createTextNode(me.user?.fullName || me.user?.email || 'Admin'));
+      const topbar = document.querySelector('.admin-top');
+      if (topbar && !topbar.querySelector('.admin-global-search')) {
+        const search = document.createElement('div');
+        search.className = 'admin-global-search';
+        search.innerHTML = `${icon('search', 16)}<input placeholder="Search anything…" aria-label="Search anything"><kbd>⌘ K</kbd>`;
+        topbar.prepend(search);
+      }
       render();
       bindShell();
+      if (section === 'services' && adminData.services?.length) {
+        openService(adminData.services.find(item => item.id === 'gps') || adminData.services[0]);
+        setTimeout(() => renderServiceImageActions(document.querySelector('.drawer')), 0);
+        document.querySelector('[data-notification-popover]')?.classList.add('open');
+      }
     } catch (error) {
       redirectToLogin();
     }
   }
 
   function bindShell() {
-    document.querySelectorAll('[data-admin-nav]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); section = link.dataset.adminNav; location.hash = section; render(); document.querySelector('.admin-sidebar')?.classList.remove('open'); }));
+    document.querySelectorAll('[data-admin-nav]').forEach(link => link.addEventListener('click', event => { event.preventDefault(); section = link.dataset.adminNav; location.hash = section; render(); document.querySelector('.admin-sidebar')?.classList.remove('open'); if (section === 'services' && adminData.services?.length) setTimeout(() => { openService(adminData.services.find(item => item.id === 'gps') || adminData.services[0]); document.querySelector('[data-notification-popover]')?.classList.add('open'); setTimeout(() => renderServiceImageActions(document.querySelector('.drawer')), 0); }, 0); }));
     document.querySelector('[data-admin-menu]')?.addEventListener('click', () => document.querySelector('.admin-sidebar')?.classList.toggle('open'));
     document.querySelector('[data-admin-logout]')?.addEventListener('click', redirectToLogin);
     const bell = document.querySelector('[data-notifications]') || document.querySelector('.admin-user [data-lucide="bell"]')?.parentElement;
@@ -81,7 +93,7 @@ window.__newAdminApp = true;
     const total = inquiries.length, conversion = total ? Math.round((won / total) * 100) : 0;
     const recent = inquiries.slice(0, 5);
     const monthly = Array.from({ length: 12 }, (_, i) => inquiries.filter(x => new Date(x.created || 0).getMonth() === i).length);
-    const max = Math.max(...monthly, 1), points = monthly.map((n, i) => `${i * 9.09}%,${90 - (n / max) * 70}%`).join(' ');
+    const max = Math.max(...monthly, 1), points = monthly.map((n, i) => `${i * 9.09},${90 - (n / max) * 70}`).join(' ');
     const pillarCounts = ['Fleet', 'Digital', 'Technology'].map(name => ({ name, count: inquiries.filter(x => String(x.service || '').toLowerCase().includes(name.toLowerCase())).length }));
     const sum = Math.max(pillarCounts.reduce((a, x) => a + x.count, 0), 1), p1 = pillarCounts[0].count / sum * 360, p2 = p1 + pillarCounts[1].count / sum * 360;
     return `<div class="admin-page-head"><div><div class="eyebrow">Operations overview</div><h2>Dashboard</h2><p class="muted">A live view of your published content and incoming opportunities.</p></div><button class="date-filter">${icon('calendar-days', 16)} ${new Intl.DateTimeFormat('en-KE', { month: 'short', day: 'numeric' }).format(new Date(Date.now() - 30 * 86400000))} – ${new Intl.DateTimeFormat('en-KE', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date())} ${icon('chevron-down', 15)}</button></div>
@@ -145,5 +157,18 @@ window.__newAdminApp = true;
 
   function openContent(collection, item = {}) { const drawer = document.querySelector('.drawer'), backdrop = document.querySelector('[data-drawer-backdrop]'); backdrop.classList.add('open'); const label = collection === 'team' ? 'Team member' : collection.slice(0, -1); drawer.innerHTML = `<div class="drawer-head"><h2>${item.id ? 'Edit' : 'New'} ${label}</h2><button class="icon-btn" data-close-drawer>${icon('x', 19)}</button></div><form data-content-form>${collection === 'projects' ? `<div class="field"><label>Client</label><input name="client" value="${esc(item.client || '')}"></div><div class="field"><label>Cover image URL</label><input name="image" value="${esc(item.image || '')}"></div>` : collection === 'team' ? `<div class="field"><label>Photo URL</label><input name="image" value="${esc(item.image || '')}"></div><div class="field"><label>Role</label><input name="role" value="${esc(item.role || '')}"></div><div class="field"><label>Social links</label><textarea name="socials">${esc((item.socials || []).join('\n'))}</textarea></div>` : collection === 'testimonials' ? `<div class="field"><label>Author photo URL</label><input name="image" value="${esc(item.image || '')}"></div><div class="field"><label>Company</label><input name="company" value="${esc(item.company || '')}"></div><div class="field"><label>Rating</label><input name="rating" type="number" min="1" max="5" value="${esc(item.rating || 5)}"></div>` : ''}<div class="field"><label>Title / name</label><input name="title" value="${esc(item.title || '')}" required></div><div class="field"><label>Description</label><textarea name="description" required>${esc(item.description || '')}</textarea></div>${collection === 'projects' ? `<div class="field"><label>Results (one per line)</label><textarea name="results">${esc((item.results || []).join('\n'))}</textarea></div>` : ''}<label class="check-field"><input type="checkbox" name="published" ${item.published !== false ? 'checked' : ''}> Published on website</label><div class="drawer-actions"><button class="btn btn-primary" type="submit">Save changes</button><button class="btn btn-outline" type="button" data-close-drawer>Cancel</button></div></form>`; renderIcons(); drawer.querySelectorAll('[data-close-drawer]').forEach(b => b.addEventListener('click', () => backdrop.classList.remove('open'))); drawer.querySelector('[data-content-form]').addEventListener('submit', async e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const next = { ...item, id: item.id || `${collection}-${Date.now()}`, title: f.title.trim(), description: f.description.trim(), published: f.published === 'on' }; ['client','image','role','company','rating'].forEach(k => { if (f[k] !== undefined) next[k] = f[k]; }); if (collection === 'projects') next.results = f.results.split('\n').map(x => x.trim()).filter(Boolean); if (collection === 'team') next.socials = f.socials.split('\n').map(x => x.trim()).filter(Boolean); const i = adminData[collection].findIndex(x => x.id === next.id); if (i >= 0) adminData[collection][i] = next; else adminData[collection].push(next); await persist(adminData, `${label} saved`, next.title); backdrop.classList.remove('open'); render(); }); }
 
+  function renderServiceImageActions(drawer) {
+    const field = drawer?.querySelector('.image-upload-field');
+    if (!field || field.querySelector('.image-actions')) return;
+    const actions = document.createElement('div');
+    actions.className = 'image-actions';
+    actions.innerHTML = `<button class="btn btn-outline btn-sm" type="button" data-replace-image>${icon('image-up', 14)} Replace image</button><button class="btn btn-outline btn-sm" type="button" data-focus-alt>${icon('accessibility', 14)} Alt text</button>`;
+    field.insertBefore(actions, field.querySelector('input'));
+    actions.querySelector('[data-replace-image]')?.addEventListener('click', () => field.querySelector('input')?.focus());
+    actions.querySelector('[data-focus-alt]')?.addEventListener('click', () => drawer.querySelector('[name="altText"]')?.focus());
+  }
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-edit-service], [data-new-service]')) setTimeout(() => renderServiceImageActions(document.querySelector('.drawer')), 0);
+  });
   document.addEventListener('DOMContentLoaded', boot);
 })();
