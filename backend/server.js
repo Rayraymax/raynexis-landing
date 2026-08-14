@@ -69,6 +69,58 @@ async function getState() {
 async function saveState(data) {
   await pool.query('insert into app_state (id, data, updated_at) values (1, $1, now()) on conflict (id) do update set data = excluded.data, updated_at = now()', [cleanState(data)]);
 }
+function whatsappNumber(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.startsWith('0') ? `254${digits.slice(1)}` : digits;
+}
+function leadScore(lead = {}) {
+  let score = 0;
+  if (lead.need || lead.service) score += 25;
+  if (lead.industry || lead.company) score += 10;
+  if (lead.scale || lead.fleet) score += 20;
+  if (lead.timeline) score += /immediate|urgent|week|month-end|30 days/i.test(lead.timeline) ? 20 : 10;
+  if (lead.budget) score += 10;
+  if (lead.name && lead.phone) score += 15;
+  return Math.min(score, 100);
+}
+function agentContext(state) {
+  const publicData = publicState(state);
+  return {
+    company: publicData.settings.company || 'Raynexis Solutions',
+    location: publicData.settings.address || 'Nairobi, Kenya',
+    services: publicData.services.map(({ id, title, category, price, description, shortDescription, features, published }) => ({ id, title, category, price, description, shortDescription, features, published })),
+    caseStudies: publicData.projects.map(({ title, client, summary, description, results, published }) => ({ title, client, summary, description, results, published })),
+    pages: publicData.pages.map(({ title, slug, description, seoTitle, seoDescription, published }) => ({ title, slug, description, seoTitle, seoDescription, published }))
+  };
+}
+function responseText(result) {
+  if (typeof result?.output_text === 'string' && result.output_text.trim()) return result.output_text.trim();
+  return (result?.output || []).flatMap(item => item.content || []).map(item => item.text || '').join('').trim();
+}
+function parseAgentReply(text) {
+  const candidate = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try { return JSON.parse(candidate); } catch { return { reply: candidate || 'I can help you find the right Raynexis solution.', stage: 'question' }; }
+}
+function buildWhatsAppMessage(settings, lead, message, score) {
+  const lines = [
+    'Hello Raynexis, I would like help with a technology solution.',
+    '',
+    `Name: ${lead.name || 'Not provided'}`,
+    `Company: ${lead.company || 'Not provided'}`,
+    `Phone: ${lead.phone || 'Not provided'}`,
+    `Email: ${lead.email || 'Not provided'}`,
+    `Need / service: ${lead.need || lead.service || 'Not provided'}`,
+    `Industry: ${lead.industry || 'Not provided'}`,
+    `Fleet / scale: ${lead.scale || lead.fleet || 'Not provided'}`,
+    `Timeline: ${lead.timeline || 'Not provided'}`,
+    `Budget: ${lead.budget || 'Not provided'}`,
+    `Details: ${message || lead.message || 'Not provided'}`,
+    '',
+    `Raynexis concierge lead score: ${score}/100`
+  ];
+  const number = whatsappNumber(settings.whatsapp);
+  return `https://wa.me/${number}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
 async function initialise() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required.');
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET must be at least 32 characters.');
@@ -85,7 +137,19 @@ async function initialise() {
       id uuid primary key default gen_random_uuid(), name text not null, company text, phone text not null, email text not null,
       service text, fleet text, budget text, timeline text, message text not null,
       status text not null default 'New' check (status in ('New', 'Contacted', 'Won')),
+      source text not null default 'website', lead_score integer not null default 0, conversation_id text, transcript jsonb not null default '[]'::jsonb,
       created_at timestamptz not null default now()
+    );
+    alter table inquiries alter column email drop not null;
+    alter table inquiries add column if not exists source text not null default 'website';
+    alter table inquiries add column if not exists lead_score integer not null default 0;
+    alter table inquiries add column if not exists conversation_id text;
+    alter table inquiries add column if not exists transcript jsonb not null default '[]'::jsonb;
+    create table if not exists agent_conversations (
+      id uuid primary key default gen_random_uuid(), session_id text unique not null,
+      lead jsonb not null default '{}'::jsonb, transcript jsonb not null default '[]'::jsonb,
+      lead_score integer not null default 0, handoff boolean not null default false,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now()
     );
     create table if not exists media_assets (
       id uuid primary key default gen_random_uuid(),
@@ -171,6 +235,60 @@ app.post('/api/inquiries', async (req, res, next) => {
     res.status(201).json(result.rows[0]);
   } catch (error) { next(error); }
 });
+app.post('/api/agent/chat', async (req, res, next) => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'The concierge is being configured. You can continue directly on WhatsApp.', fallback: true });
+    const sessionId = String(req.body?.sessionId || '').slice(0, 120);
+    const messages = Array.isArray(req.body?.messages) ? req.body.messages.slice(-12).map(item => ({ role: item.role === 'assistant' ? 'assistant' : 'user', content: String(item.content || '').slice(0, 1200) })).filter(item => item.content) : [];
+    if (!messages.length) return res.status(400).json({ error: 'Please send a message.' });
+    const context = agentContext(await getState());
+    const instructions = `You are Raynexis Concierge, a professional service concierge for Raynexis Solutions in Kenya.
+Use only the supplied Raynexis content as factual knowledge. Never invent pricing, availability, NTSA or other compliance claims, coverage, guarantees, or case-study results. If the answer is not in the content, say you do not have that detail and offer WhatsApp handoff.
+Your goals are: answer the visitor's question briefly; qualify in this order when appropriate: need/service, industry, fleet or business scale, timeline, then name and phone; and offer a human WhatsApp handoff at any time.
+Return valid JSON only with this shape: {"reply":"...","stage":"answer|question|handoff","lead":{"need":"","industry":"","scale":"","timeline":"","name":"","company":"","phone":"","email":"","budget":"","message":""},"leadScore":0,"readyForWhatsApp":false,"whatsappSummary":""}.
+Ask one concise question at a time. Set readyForWhatsApp true only when the visitor has supplied enough context to make a useful handoff or explicitly asks for a human. Keep replies warm, concise, and practical.
+Raynexis content:\n${JSON.stringify(context)}`;
+    const openaiResponse = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: process.env.AGENT_MODEL || 'gpt-5', instructions, input: messages, max_output_tokens: 700 })
+    });
+    if (!openaiResponse.ok) {
+      const detail = await openaiResponse.text();
+      console.error('OpenAI concierge error', detail.slice(0, 500));
+      return res.status(502).json({ error: 'The concierge is temporarily unavailable. You can continue directly on WhatsApp.', fallback: true });
+    }
+    const parsed = parseAgentReply(responseText(await openaiResponse.json()));
+    const lead = { ...(req.body?.lead || {}), ...(parsed.lead || {}) };
+    const score = leadScore(lead);
+    const transcript = [...messages, { role: 'assistant', content: String(parsed.reply || '').slice(0, 2000) }];
+    if (sessionId && process.env.AGENT_PERSIST_CONVERSATIONS !== 'false') {
+      await pool.query(`insert into agent_conversations (session_id, lead, transcript, lead_score, handoff, updated_at) values ($1,$2,$3,$4,$5,now()) on conflict (session_id) do update set lead=$2, transcript=$3, lead_score=$4, handoff=$5, updated_at=now()`, [sessionId, JSON.stringify(lead), JSON.stringify(transcript), score, Boolean(parsed.readyForWhatsApp)]);
+    }
+    res.json({ reply: parsed.reply || 'I can help you find the right Raynexis solution.', stage: parsed.stage || 'question', lead, leadScore: score, readyForWhatsApp: Boolean(parsed.readyForWhatsApp), whatsappSummary: parsed.whatsappSummary || '' });
+  } catch (error) { next(error); }
+});
+app.post('/api/agent/whatsapp', async (req, res, next) => {
+  try {
+    const ip = req.ip || 'unknown'; const now = Date.now(); const log = attempts.get(`agent:${ip}`) || [];
+    const recent = log.filter(time => now - time < 15 * 60 * 1000);
+    if (recent.length >= 8) return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    attempts.set(`agent:${ip}`, [...recent, now]);
+    const lead = req.body?.lead && typeof req.body.lead === 'object' ? req.body.lead : {};
+    const name = String(lead.name || '').trim(); const phone = String(lead.phone || '').trim();
+    if (!name || !phone) return res.status(400).json({ error: 'Please provide your name and WhatsApp number before continuing.' });
+    const message = String(lead.message || req.body?.message || '').trim() || 'I would like to discuss a solution for my business.';
+    const score = leadScore(lead); const transcript = Array.isArray(req.body?.transcript) ? req.body.transcript.slice(-30) : [];
+    const state = await getState(); const settings = state.settings || {};
+    const sessionId = String(req.body?.sessionId || '').slice(0, 120) || null;
+    const conversationId = sessionId ? (await pool.query('select id from agent_conversations where session_id=$1', [sessionId])).rows[0]?.id : null;
+    const result = await pool.query(`insert into inquiries (name, company, phone, email, service, fleet, budget, timeline, message, source, lead_score, conversation_id, transcript) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'whatsapp',$10,$11,$12) returning id, status, created_at as created`, [name, String(lead.company || '').trim() || null, phone, String(lead.email || '').trim().toLowerCase() || null, String(lead.need || lead.service || '').trim() || null, String(lead.scale || lead.fleet || '').trim() || null, String(lead.budget || '').trim() || null, String(lead.timeline || '').trim() || null, message, score, conversationId, JSON.stringify(transcript)]);
+    if (sessionId) await pool.query('update agent_conversations set handoff=true, updated_at=now() where session_id=$1', [sessionId]);
+    await pool.query('insert into activity_log (action, detail) values ($1, $2)', ['New WhatsApp inquiry', `${name} · ${lead.need || lead.service || 'General enquiry'}`]);
+    res.status(201).json({ ...result.rows[0], leadScore: score, whatsappUrl: buildWhatsAppMessage(settings, lead, message, score) });
+  } catch (error) { next(error); }
+});
 app.post('/api/auth/login', async (req, res, next) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase(); const password = String(req.body?.password || '');
@@ -184,10 +302,11 @@ app.post('/api/auth/login', async (req, res, next) => {
 app.get('/api/auth/me', auth, async (req, res) => res.json({ user: { email: req.user.email } }));
 app.get('/api/admin/bootstrap', auth, async (_req, res, next) => {
   try {
-    const inquiries = await pool.query('select id, name, company, phone, email, service, fleet, budget, timeline, message, status, created_at as created from inquiries order by created_at desc');
+    const inquiries = await pool.query('select id, name, company, phone, email, service, fleet, budget, timeline, message, status, source, lead_score as "leadScore", conversation_id as "conversationId", transcript, created_at as created from inquiries order by created_at desc');
     const media = await pool.query('select id, filename, mime_type as "mimeType", data_url as "dataUrl", alt_text as "altText", caption, folder, created_at as created, updated_at as updated from media_assets order by created_at desc');
     const activity = await pool.query('select id, action, detail, created_at as created from activity_log order by created_at desc limit 20');
-    res.json({ ...(await getState()), inquiries: inquiries.rows, media: media.rows, activity: activity.rows });
+    const conversations = await pool.query('select id, session_id as "sessionId", lead, transcript, lead_score as "leadScore", handoff, created_at as created, updated_at as updated from agent_conversations order by updated_at desc limit 50');
+    res.json({ ...(await getState()), inquiries: inquiries.rows, media: media.rows, activity: activity.rows, agentConversations: conversations.rows });
   } catch (error) { next(error); }
 });
 app.put('/api/admin/state', auth, async (req, res, next) => {

@@ -2,6 +2,12 @@ const RAYNEXIS_KEY = 'raynexis-platform-v1';
 const API_BASE = String(window.RAYNEXIS_API_URL || '').replace(/\/$/, '');
 const backendEnabled = Boolean(API_BASE && !API_BASE.includes('YOUR-RAILWAY'));
 
+if (document.body && !document.body.classList.contains('admin-body') && !document.querySelector('[data-admin]') && !document.querySelector('.rx-concierge-launcher')) {
+  const conciergeScript = document.createElement('script');
+  conciergeScript.src = 'agent-widget.js';
+  document.body.appendChild(conciergeScript);
+}
+
 const defaultData = {
   settings: {
     company: 'Raynexis Solutions',
@@ -432,7 +438,7 @@ function renderPillars() {
 
             <a
               class="text-link"
-              href="services.html?category=${encodeURIComponent(item.category)}"
+              href="/services?category=${encodeURIComponent(item.category)}"
             >
               Explore pillar ${icon('arrow-up-right', 16)}
             </a>
@@ -489,7 +495,7 @@ function renderServices(filter = 'All') {
 
               <a
                 class="text-link"
-                href="contact.html?service=${encodeURIComponent(item.title)}"
+                href="/contact?service=${encodeURIComponent(item.title)}"
               >
                 Request quote ${icon('arrow-right', 16)}
               </a>
@@ -558,7 +564,7 @@ function renderHomeSections() {
   if (ctaData.headline && cta) { cta.querySelector('h2').textContent = ctaData.headline; cta.querySelector('p').textContent = ctaData.body || ''; }
   const serviceHost = document.querySelector('[data-home-services]');
   if (serviceHost) {
-    serviceHost.innerHTML = data.services.filter(item => item.published).slice(0, 3).map(item => `<article class="home-service-card"><div class="home-service-image">${item.image ? `<img src="${esc(item.image)}" alt="${esc(item.altText || item.title)}" loading="lazy">` : icon(item.icon, 28)}</div><div class="home-service-copy"><span class="eyebrow">${esc(item.category)}</span><h3>${esc(item.title)}</h3><p>${esc(item.shortDescription || item.description)}</p><div class="home-service-meta"><strong>${esc(item.price || 'Talk to us')}</strong><a class="text-link" href="contact.html?service=${encodeURIComponent(item.title)}">Explore ${icon('arrow-up-right', 15)}</a></div></div></article>`).join('');
+    serviceHost.innerHTML = data.services.filter(item => item.published).slice(0, 3).map(item => `<article class="home-service-card"><div class="home-service-image">${item.image ? `<img src="${esc(item.image)}" alt="${esc(item.altText || item.title)}" loading="lazy">` : icon(item.icon, 28)}</div><div class="home-service-copy"><span class="eyebrow">${esc(item.category)}</span><h3>${esc(item.title)}</h3><p>${esc(item.shortDescription || item.description)}</p><div class="home-service-meta"><strong>${esc(item.price || 'Talk to us')}</strong><a class="text-link" href="/contact?service=${encodeURIComponent(item.title)}">Explore ${icon('arrow-up-right', 15)}</a></div></div></article>`).join('');
   }
   const caseHost = document.querySelector('[data-home-cases]');
   if (caseHost) {
@@ -601,57 +607,23 @@ function initContactForm() {
       new FormData(form)
     );
 
-    if (backendEnabled) {
-      try {
-        await apiRequest('/api/inquiries', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-      } catch (error) {
-        status.textContent = error.message;
-        return;
-      }
-    } else {
-      const data = getData();
-      data.inquiries.unshift({ ...payload, id: `inq-${Date.now()}`, status: 'New', created: new Date().toISOString() });
-      saveData(data);
-    }
-
+    const message = `Hello Raynexis Solutions, I am ${payload.name}. I need help with ${payload.service || 'your services'}. ${payload.message || ''}`;
+    const lead = { ...payload, need: payload.service, scale: payload.fleet };
     try {
-      const lead = new URLSearchParams(
-        new FormData(form)
-      );
-
-      lead.set('form-name', 'contact-lead');
-
-      await fetch('/', {
+      const response = await apiRequest('/api/agent/whatsapp', {
         method: 'POST',
-        headers: {
-          'Content-Type':
-            'application/x-www-form-urlencoded'
-        },
-        body: lead.toString()
+        body: JSON.stringify({ lead, message, transcript: [{ role: 'user', content: message }] })
       });
-    } catch {
-      // Netlify collects this form after deployment.
+      status.textContent = 'Your brief is ready — opening WhatsApp now.';
+      form.classList.add('submitted');
+      form.reset();
+      window.open(response.whatsappUrl, '_blank', 'noopener');
+    } catch (error) {
+      status.textContent = 'Opening WhatsApp with your request…';
+      form.classList.add('submitted');
+      form.reset();
+      window.open(waLink(message), '_blank', 'noopener');
     }
-
-    status.textContent =
-      'Thanks — we’ll get back to you shortly.';
-
-    form.classList.add('submitted');
-    form.reset();
-
-    const message =
-      `Hello Raynexis Solutions, I am ${payload.name}. ` +
-      `I need help with ${payload.service || 'your services'}. ` +
-      `${payload.message || ''}`;
-
-    window.open(
-      waLink(message),
-      '_blank',
-      'noopener'
-    );
   });
 }
 

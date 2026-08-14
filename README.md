@@ -15,7 +15,7 @@ Open `http://127.0.0.1:4173`.
 1. Push this folder to GitHub.
 2. In Netlify, choose **Add new project** > **Import an existing project** > GitHub.
 3. Select the repository. Netlify reads `netlify.toml`; leave the build command blank and publish directory as `.`.
-4. Deploy, then open **Forms** and enable form detection. Redeploy once so Netlify detects `contact-lead`.
+4. Deploy. Public inquiries now go through the WhatsApp-first concierge and are stored by the Railway API at handoff; Netlify Forms is not used for lead capture.
 5. Set your custom domain in **Domain management** and update the canonicals in the HTML from `raynexis.co.ke` if your final domain differs.
 
 ## Production admin backend: Railway
@@ -32,6 +32,9 @@ JWT_SECRET=USE-A-UNIQUE-SECRET-AT-LEAST-32-CHARACTERS-LONG
 FRONTEND_ORIGIN=https://YOUR-NETLIFY-SITE.netlify.app
 ADMIN_EMAIL=admin@raynexis.co.ke
 SEED_ADMIN_PASSWORD=USE-A-STRONG-UNIQUE-TEMPORARY-PASSWORD
+OPENAI_API_KEY=YOUR-SERVER-ONLY-OPENAI-API-KEY
+AGENT_MODEL=gpt-5
+AGENT_PERSIST_CONVERSATIONS=true
 NODE_ENV=production
 ```
 
@@ -40,3 +43,5 @@ NODE_ENV=production
 6. Sign in at `admin-login.html` with `ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`. After the first successful login, remove `SEED_ADMIN_PASSWORD` from Railway Variables and redeploy; the password is already stored as a hash in PostgreSQL.
 
 Keep `DATABASE_URL`, `JWT_SECRET`, and all passwords in Railway Variables only — never in GitHub or `api-config.js`.
+
+The public concierge uses the server-side OpenAI Responses API. Keep `OPENAI_API_KEY` in Railway Variables only; never expose it in frontend JavaScript. The concierge is grounded with published Raynexis services, pages, and case studies, then prepares a structured WhatsApp handoff. Public inquiries are saved as `source = whatsapp` with a lead score and transcript when the visitor chooses the handoff.

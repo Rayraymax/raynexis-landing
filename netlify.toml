@@ -5,6 +5,21 @@
 [build.processing]
   skip_processing = false
 
+[[redirects]]
+  from = "/services"
+  to = "/services.html"
+  status = 200
+
+[[redirects]]
+  from = "/contact"
+  to = "/contact.html"
+  status = 200
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
 [[headers]]
   for = "/*.html"
   [headers.values]
